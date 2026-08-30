@@ -10,40 +10,88 @@ jobs:
 
     steps:
 
+      # ==============================
+      # Tailscale
+      # ==============================
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: Enable macOS Screen Sharing
+      # ==============================
+      # Create temporary VNC account
+      # ==============================
+      - name: Create Temporary VNC User
         run: |
-          sudo launchctl load -w \
-            /System/Library/LaunchDaemons/com.apple.screensharing.plist || true
+          VNC_USER="vncuser"
 
-          sudo defaults write /Library/Preferences/com.apple.RemoteManagement \
-            ARD_AllLocalUsers -bool true
+          # Generate temporary password
+          VNC_PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)
 
-      - name: Show Connection Information
+          echo "VNC_USER=$VNC_USER" >> "$GITHUB_ENV"
+          echo "VNC_PASS=$VNC_PASS" >> "$GITHUB_ENV"
+
+          # Create user
+          sudo sysadminctl \
+            -addUser "$VNC_USER" \
+            -fullName "Temporary VNC User" \
+            -password "$VNC_PASS"
+
+          # Allow this user to use Screen Sharing
+          sudo dseditgroup \
+            -o edit \
+            -a "$VNC_USER" \
+            -t user \
+            com.apple.access_screensharing
+
+      # ==============================
+      # Enable macOS Screen Sharing
+      # ==============================
+      - name: Enable Screen Sharing
         run: |
-          echo "================================"
-          echo "Tailscale IP:"
-          tailscale ip -4
+          sudo launchctl enable system/com.apple.screensharing
 
+          sudo launchctl bootstrap system \
+            /System/Library/LaunchDaemons/com.apple.screensharing.plist \
+            2>/dev/null || true
+
+          sudo launchctl kickstart -k \
+            system/com.apple.screensharing
+
+          sleep 3
+
+      # ==============================
+      # Display connection information
+      # ==============================
+      - name: VNC Connection Information
+        run: |
+          IP=$(tailscale ip -4)
+
+          echo ""
+          echo "======================================"
+          echo "        REALVNC CONNECTION"
+          echo "======================================"
+          echo ""
+          echo "Server:"
+          echo "$IP::5900"
           echo ""
           echo "Username:"
-          whoami
-
+          echo "$VNC_USER"
           echo ""
-          echo "Hostname:"
-          hostname
+          echo "Password:"
+          echo "$VNC_PASS"
+          echo ""
+          echo "======================================"
 
-          echo "================================"
-          echo "Use the Tailscale IP in RealVNC Viewer"
-          echo "================================"
-
-      - name: Keep Mac Running
+      # ==============================
+      # Keep Mac alive
+      # ==============================
+      - name: MacOS System running...
         run: |
+          echo "MacOS runner is ready."
+          echo "Keep this workflow running."
+
           while true; do
-            echo "$(date): macOS runner alive"
+            echo "$(date): MacOS runner alive"
             sleep 60
           done
