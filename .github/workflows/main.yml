@@ -1,0 +1,49 @@
+name: MacVNC
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: MacVNC
+    runs-on: macos-latest
+
+    steps:
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Enable macOS Screen Sharing
+        run: |
+          sudo launchctl load -w \
+            /System/Library/LaunchDaemons/com.apple.screensharing.plist || true
+
+          sudo defaults write /Library/Preferences/com.apple.RemoteManagement \
+            ARD_AllLocalUsers -bool true
+
+      - name: Show Connection Information
+        run: |
+          echo "================================"
+          echo "Tailscale IP:"
+          tailscale ip -4
+
+          echo ""
+          echo "Username:"
+          whoami
+
+          echo ""
+          echo "Hostname:"
+          hostname
+
+          echo "================================"
+          echo "Use the Tailscale IP in RealVNC Viewer"
+          echo "================================"
+
+      - name: Keep Mac Running
+        run: |
+          while true; do
+            echo "$(date): macOS runner alive"
+            sleep 60
+          done
